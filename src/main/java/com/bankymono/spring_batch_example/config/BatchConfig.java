@@ -1,8 +1,6 @@
 package com.bankymono.spring_batch_example.config;
 
-import com.bankymono.spring_batch_example.batch.BookAuthorProcessor;
-import com.bankymono.spring_batch_example.batch.BookTitleProcessor;
-import com.bankymono.spring_batch_example.batch.BookWriter;
+import com.bankymono.spring_batch_example.batch.*;
 import com.bankymono.spring_batch_example.entity.BookEntity;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -12,6 +10,7 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
@@ -21,6 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -32,6 +32,7 @@ public class BatchConfig {
         return new JobBuilder("bookReadJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
                 .start(chunkStep(jobRepository, transactionManager))
+                .next(taskletStep(jobRepository,transactionManager))
                 .build();
     }
 
@@ -40,9 +41,21 @@ public class BatchConfig {
         return new StepBuilder("bookReaderStep", jobRepository)
                 .<BookEntity, BookEntity> chunk(10, transactionManager)
                 .reader(reader())
+//                .reader(restBookReader())
                 .processor(processor())
                 .writer(writer())
                 .build();
+    }
+
+    @Bean
+    public Step taskletStep(JobRepository jobRepository, PlatformTransactionManager platformTransactionManager) {
+        return new StepBuilder("taskletStep", jobRepository).tasklet(new BookTasklet(),platformTransactionManager).build();
+    }
+
+    @Bean
+    @StepScope
+    public ItemReader<BookEntity> restBookReader() {
+        return new RestBookReader("http://localhost:8080/book", new RestTemplate());
     }
 
     @StepScope
